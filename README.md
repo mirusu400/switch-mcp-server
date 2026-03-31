@@ -113,6 +113,16 @@ Resource templates:
 
 ## Build
 
+### Docker (recommended)
+
+You can build anywhere if you installed docker.
+
+```bash
+./build.sh
+```
+
+### Native
+
 Requirements:
 
 - `devkitPro`

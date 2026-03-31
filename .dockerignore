@@ -1,0 +1,9 @@
+build
+out
+*.elf
+*.npdm
+*.nso
+*.nsp
+*.zip
+.git
+.DS_Store
