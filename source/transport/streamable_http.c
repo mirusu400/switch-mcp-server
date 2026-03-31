@@ -70,13 +70,27 @@ void worker_func(void* arg) {
             req[n] = '\0';
             log_info("Received request: %s", req);
             if (strncmp(req, "GET /mcp", 8) == 0) {
-                add_sse_connection(client_fd, get_header(req, "Mcp-Session-Id"), get_header(req, "Last-Event-ID"));
-                // send(client_fd, "HTTP/1.1 405 Method Not Allowed\r\nconnection: close\r\ncontent-length: 0\r\n\r\n", 78, 0);
-                // close(client_fd);
+                char sid_buf[128] = {0};
+                char eid_buf[128] = {0};
+                char *sid = get_header(req, "Mcp-Session-Id");
+                if (sid) strncpy(sid_buf, sid, sizeof(sid_buf) - 1);
+                char *eid = get_header(req, "Last-Event-ID");
+                if (eid) strncpy(eid_buf, eid, sizeof(eid_buf) - 1);
+                if (sid_buf[0]) {
+                    add_sse_connection(client_fd, sid_buf, eid_buf[0] ? eid_buf : NULL);
+                } else {
+                    const char *resp =
+                        "HTTP/1.1 400 Bad Request\r\nContent-Type: application/json\r\n\r\n"
+                        "{\"error\":\"Missing Mcp-Session-Id header. Use an MCP client to connect.\"}";
+                    send(client_fd, resp, strlen(resp), 0);
+                    close(client_fd);
+                }
             } else {
                 handle_http_request(req, n, client_fd);
                 close(client_fd);
             }
+        } else {
+            close(client_fd);
         }
         log_info("Processed request from client_fd: %d", client_fd);
         worker_busy[idx] = 0; // 标记空闲
@@ -133,7 +147,7 @@ void run(void* arg) {
 
 Result streamable_http_init() {
     Thread listen_thread;
-    Result rs = threadCreate(&listen_thread, run, NULL, NULL, 0x1000, 49, -2);
+    Result rs = threadCreate(&listen_thread, run, NULL, NULL, 0x4000, 49, -2);
     if (R_FAILED(rs)) {
         log_error("Failed to create listen thread for streamable_http (%x)", rs);
         return rs;
@@ -144,7 +158,7 @@ Result streamable_http_init() {
         return rs;
     }
     Thread notification_thread;
-    rs = threadCreate(&notification_thread, sse_heartbeat, NULL, NULL, 0x1000, 49, -2);
+    rs = threadCreate(&notification_thread, sse_heartbeat, NULL, NULL, 0x4000, 49, -2);
     if (R_FAILED(rs)) {
         log_error("Failed to create notification thread for streamable_http (%x)", rs);
         return rs;

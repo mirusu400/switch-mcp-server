@@ -159,14 +159,12 @@ Hekate Toolbox -> Background Services -> switch-mcp-server
 Example MCP client config:
 
 ```json
-{
-  "servers": {
-    "switch-mcp-server": {
-      "type": "streamableHttp",
-      "url": "http://<switch-ip>:12345/mcp"
-    }
+"mcpServers": {
+  "switch-mcp-server": {
+    "type": "http",
+    "url": "http://[Switch IP]:12345/mcp"
   }
-}
+},
 ```
 
 ## Notes and Limitations

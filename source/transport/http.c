@@ -29,7 +29,7 @@ static void send_json_payload(int client_fd, cJSON *payload, const char *extra_h
 
     if (extra_headers && extra_headers[0]) {
         snprintf(header, sizeof(header),
-                 "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\n%s\r\n",
+                 "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\n%s\r\n\r\n",
                  extra_headers);
     } else {
         snprintf(header, sizeof(header),
