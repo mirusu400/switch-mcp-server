@@ -1,6 +1,7 @@
 #include "streamable_http.h"
 
-#define MAX_REQUEST_SIZE 2048
+#define INITIAL_REQUEST_SIZE 4096
+#define MAX_REQUEST_SIZE (128 * 1024)
 
 // 线程池相关
 #define WORKER_COUNT 2
@@ -56,6 +57,67 @@ char *get_header(char *req, char *key) {
     return NULL;
 }
 
+// Read full HTTP request. Starts with small buffer, grows if Content-Length requires it.
+// *out_buf is set to the buffer (caller must free if != initial_buf).
+// Returns total bytes read, or -1 on error.
+static int recv_full_request(int fd, char *initial_buf, int initial_size, char **out_buf) {
+    char *buf = initial_buf;
+    int buf_size = initial_size;
+    int total = 0;
+    int n;
+
+    *out_buf = buf;
+
+    // Read headers first
+    while (total < buf_size - 1) {
+        n = recv(fd, buf + total, buf_size - 1 - total, 0);
+        if (n <= 0) return total > 0 ? total : -1;
+        total += n;
+        buf[total] = '\0';
+
+        char *header_end = strstr(buf, "\r\n\r\n");
+        if (!header_end) continue;
+
+        // Parse Content-Length
+        char *cl = strstr(buf, "Content-Length:");
+        if (!cl) cl = strstr(buf, "content-length:");
+        if (!cl) return total;
+
+        int content_length = atoi(cl + 15);
+        if (content_length <= 0) return total;
+
+        int header_len = (int)(header_end - buf) + 4;
+        int need = header_len + content_length;
+
+        // Grow buffer if needed
+        if (need >= buf_size) {
+            int new_size = need + 1;
+            if (new_size > MAX_REQUEST_SIZE) new_size = MAX_REQUEST_SIZE;
+            char *new_buf = (char *)malloc(new_size);
+            if (!new_buf) {
+                // Can't grow, read what fits
+                need = buf_size - 1;
+            } else {
+                memcpy(new_buf, buf, total);
+                if (buf != initial_buf) free(buf);
+                buf = new_buf;
+                buf_size = new_size;
+                *out_buf = buf;
+            }
+            if (need >= buf_size) need = buf_size - 1;
+        }
+
+        while (total < need) {
+            n = recv(fd, buf + total, need - total, 0);
+            if (n <= 0) break;
+            total += n;
+        }
+        buf[total] = '\0';
+        return total;
+    }
+    return total;
+}
+
 void worker_func(void* arg) {
     int idx = (int)(intptr_t)arg;
     while (1) {
@@ -64,11 +126,11 @@ void worker_func(void* arg) {
             continue;
         }
         int client_fd = worker_client_fd[idx];
-        char req[MAX_REQUEST_SIZE];
-        int n = recv(client_fd, req, sizeof(req)-1, 0);
+        char small_buf[INITIAL_REQUEST_SIZE];
+        char *req = NULL;
+        int n = recv_full_request(client_fd, small_buf, sizeof(small_buf), &req);
         if (n > 0) {
-            req[n] = '\0';
-            log_info("Received request: %s", req);
+            log_info("Received %d bytes from client_fd: %d", n, client_fd);
             if (strncmp(req, "GET /mcp", 8) == 0) {
                 char sid_buf[128] = {0};
                 char eid_buf[128] = {0};
@@ -92,8 +154,9 @@ void worker_func(void* arg) {
         } else {
             close(client_fd);
         }
+        if (req != small_buf) free(req);
         log_info("Processed request from client_fd: %d", client_fd);
-        worker_busy[idx] = 0; // 标记空闲
+        worker_busy[idx] = 0;
     }
 }
 

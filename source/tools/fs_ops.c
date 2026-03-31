@@ -277,6 +277,7 @@ int list_fs_ops(cJSON *tools) {
     cJSON_AddItemToArray(action_enum, cJSON_CreateString("read_text"));
     cJSON_AddItemToArray(action_enum, cJSON_CreateString("write_text"));
     cJSON_AddItemToArray(action_enum, cJSON_CreateString("mkdir"));
+    cJSON_AddItemToArray(action_enum, cJSON_CreateString("write_binary"));
     cJSON_AddItemToArray(action_enum, cJSON_CreateString("delete"));
     cJSON_AddItemToObject(action, "enum", action_enum);
     cJSON_AddItemToObject(properties, "action", action);
@@ -286,7 +287,7 @@ int list_fs_ops(cJSON *tools) {
     cJSON_AddItemToObject(properties, "path", path);
 
     cJSON_AddStringToObject(text, "type", "string");
-    cJSON_AddStringToObject(text, "description", "text payload for write_text");
+    cJSON_AddStringToObject(text, "description", "text payload for write_text, or base64-encoded data for write_binary");
     cJSON_AddItemToObject(properties, "text", text);
 
     cJSON_AddStringToObject(append, "type", "boolean");
@@ -387,6 +388,58 @@ int call_fs_ops(cJSON *content, const cJSON *arguments) {
             return 1;
         }
         fclose(f);
+        build_stat_json(&json, path->valuestring);
+        if (!json) {
+            add_text_item(content, "write succeeded");
+            return 0;
+        }
+        int rc = add_json_text_item(content, json);
+        cJSON_Delete(json);
+        return rc;
+    }
+
+    if (strcmp(action->valuestring, "write_binary") == 0) {
+        FILE *f = NULL;
+        const char *mode = (cJSON_IsBool(append) && append->valueint) ? "ab" : "wb";
+        size_t src_len, out_max;
+        unsigned char *decoded = NULL;
+        int decoded_len;
+
+        if (!cJSON_IsString(text)) {
+            add_text_item(content, "write_binary requires base64-encoded text field");
+            return 1;
+        }
+        if (!ensure_parent_dir(path->valuestring)) {
+            add_text_item(content, "failed to create parent directories");
+            return 1;
+        }
+        src_len = strlen(text->valuestring);
+        out_max = src_len * 3 / 4 + 4;
+        decoded = (unsigned char *)malloc(out_max);
+        if (!decoded) {
+            add_text_item(content, "out of memory");
+            return 1;
+        }
+        decoded_len = stb_base64_decode(text->valuestring, decoded, out_max);
+        if (decoded_len < 0) {
+            free(decoded);
+            add_text_item(content, "invalid base64 data");
+            return 1;
+        }
+        f = fopen(path->valuestring, mode);
+        if (!f) {
+            free(decoded);
+            add_text_item(content, strerror(errno));
+            return 1;
+        }
+        if (fwrite(decoded, 1, (size_t)decoded_len, f) != (size_t)decoded_len) {
+            fclose(f);
+            free(decoded);
+            add_text_item(content, "write failed");
+            return 1;
+        }
+        fclose(f);
+        free(decoded);
         build_stat_json(&json, path->valuestring);
         if (!json) {
             add_text_item(content, "write succeeded");

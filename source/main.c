@@ -23,7 +23,7 @@
 
 // Size of the inner heap (adjust as necessary).
 // #define HEAP_SIZE 0xA7000
-#define HEAP_SIZE 0x200000 // 2MB heap size
+#define HEAP_SIZE 0x400000 // 4MB heap size
 
 #ifdef __cplusplus
 extern "C" {
@@ -74,10 +74,10 @@ void __appInit(void)
     setsysExit();
 
     static const SocketInitConfig socketInitConfig = {
-        .tcp_tx_buf_size = 0x800,
-        .tcp_rx_buf_size = 0x800,
-        .tcp_tx_buf_max_size = 0x25000,
-        .tcp_rx_buf_max_size = 0x25000,
+        .tcp_tx_buf_size = 0x2000,
+        .tcp_rx_buf_size = 0x2000,
+        .tcp_tx_buf_max_size = 0x40000,
+        .tcp_rx_buf_max_size = 0x40000,
 
         //We don't use UDP, set all UDP buffers to 0
         .udp_tx_buf_size = 0,
