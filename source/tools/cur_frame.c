@@ -1,9 +1,9 @@
-
-
 #include "../third_party/cJSON.h"
+#include <stdbool.h>
 #include <switch.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include <string.h>
 #include <switch/types.h> // for u8, u32
 #include "../third_party/stb_base64.h"  // 需项目有 base64.h/base64.c
 #include "../util/log.h"
@@ -16,7 +16,6 @@ static Service capssc;
 int capture_jpeg_screenshot(char** out_b64);
 
 int list_cur_frame(cJSON *tools) {
-    // cur_frame 工具
     cJSON *tool = cJSON_CreateObject();
     cJSON_AddStringToObject(tool, "name", "cur_frame");
     cJSON_AddStringToObject(tool, "title", "cur_frame");
@@ -35,18 +34,61 @@ int list_cur_frame(cJSON *tools) {
     return 0;
 }
 
+int list_cur_frame_resource(cJSON *resources) {
+    cJSON *resource = cJSON_CreateObject();
+    cJSON_AddStringToObject(resource, "uri", "switch://screen/current");
+    cJSON_AddStringToObject(resource, "name", "current-screen");
+    cJSON_AddStringToObject(resource, "title", "Current Screen");
+    cJSON_AddStringToObject(resource, "description", "capture the current Switch screen as a JPEG image");
+    cJSON_AddStringToObject(resource, "mimeType", "image/jpeg");
+    cJSON_AddItemToArray(resources, resource);
+    return 0;
+}
+
+bool match_cur_frame_resource(const char *uri) {
+    return uri && strcmp(uri, "switch://screen/current") == 0;
+}
+
 int call_cur_frame(cJSON *contents) {
     char *b64 = NULL;
     int rc = capture_jpeg_screenshot(&b64);
+    cJSON *item = NULL;
     log_info("[cur_frame] capture_jpeg_screenshot %s.", rc == 0 ? "succeeded" : "failed");
 
-    cJSON *item = cJSON_CreateObject();
+    if (rc != 0 || !b64) {
+        item = cJSON_CreateObject();
+        cJSON_AddStringToObject(item, "type", "text");
+        cJSON_AddStringToObject(item, "text", "capture failed");
+        cJSON_AddItemToArray(contents, item);
+        free(b64);
+        return 1;
+    }
+
+    item = cJSON_CreateObject();
     cJSON_AddStringToObject(item, "type", "image");
-    cJSON_AddStringToObject(item, "mimeType", "image/png");
+    cJSON_AddStringToObject(item, "mimeType", "image/jpeg");
     cJSON_AddStringToObject(item, "data", b64);
     if (b64) free(b64);
     cJSON_AddItemToArray(contents, item);
     log_info("[cur_frame] Success, image added to contents.");
+    return 0;
+}
+
+int read_cur_frame_resource(cJSON *contents, const char *uri) {
+    char *b64 = NULL;
+    cJSON *item = NULL;
+    int rc = capture_jpeg_screenshot(&b64);
+    if (rc != 0 || !b64) {
+        free(b64);
+        return 1;
+    }
+
+    item = cJSON_CreateObject();
+    cJSON_AddStringToObject(item, "uri", uri);
+    cJSON_AddStringToObject(item, "mimeType", "image/jpeg");
+    cJSON_AddStringToObject(item, "blob", b64);
+    cJSON_AddItemToArray(contents, item);
+    free(b64);
     return 0;
 }
 
@@ -71,6 +113,7 @@ int capture_jpeg_screenshot(char **out_b64) {
     Result rc;
     u64 jpeg_size = 0;
     size_t heap_free_before_jpeg = 0, heap_free_after_jpeg = 0;
+    *out_b64 = NULL;
     svcGetInfo(&heap_free_before_jpeg, 0, 0, 6); // InfoType_HeapUsage = 6
     log_info("[mem] heap free before jpeg malloc: %zu", heap_free_before_jpeg);
     void* jpeg_buf = malloc(JPEG_BUF_SIZE);
@@ -108,7 +151,7 @@ int capture_jpeg_screenshot(char **out_b64) {
             free(jpeg_buf);
             return -4;
         }
-        int b64_len = stb_base64_encode(jpeg_buf, jpeg_size, *out_b64);
+        int b64_len = stb_base64_encode((const unsigned char *)jpeg_buf, (int)jpeg_size, *out_b64);
         (*out_b64)[b64_len] = '\0'; // 保证 null 结尾
         free(jpeg_buf);
         return 0;

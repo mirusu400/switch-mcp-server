@@ -1,57 +1,200 @@
+# Switch MCP Server
 
-# Switch MCP-Server
+Switch MCP Server is a Nintendo Switch sysmodule that exposes a small MCP server over HTTP.
+It is designed to run under Atmosphere/Hekate and make the console remotely controllable from an external MCP client.
 
-本项目是一个用于 Nintendo Switch 的 MCP Server，提供如下功能：
+The current goal is to grow this project from a few demo tools into a generic Switch automation and diagnostics runtime.
 
-- tools
-  - 手柄按键控制注入（支持按键、摇杆、六轴等）
-  - 获取当前ns画面
-- resources
-- prompts
+## What It Does
 
-## 编译方法
+- Inject virtual controller input.
+- Capture the current screen.
+- Record real controller input.
+- Expose basic runtime status.
+- Expose basic SD-card filesystem operations.
 
-1. 安装 [devkitPro](https://devkitpro.org/) 和 libnx。
-2. 配置 `DEVKITPRO` 环境变量。
-3. 在项目根目录下运行：
-   ```
-   make
-   ```
-4. 编译产物会自动打包到 `out/` 目录。
+The server listens on:
 
-## 使用说明
+```text
+http://<switch-ip>:12345/mcp
+```
 
-1. 将 `out/atmosphere/contents/010000000000B1C0` 目录下的内容复制到你的 Switch SD 卡`/atmosphere/contents`目录下。
-2. 开关位置：Hekate Toolbox -> 后台服务 -> mcp-server
-3. 服务配置
-    ```json
-    {
-      "servers": {
-        "switch-mcp-server": {
-          "type": "streamableHttp",
-          "url": "http://{你的switch ip}:12345/mcp"
-        }
-      }
+## Current MCP Coverage
+
+Implemented methods:
+
+- `initialize`
+- `tools/list`
+- `tools/call`
+- `resources/list`
+- `resources/templates/list`
+- `resources/read`
+- `ping`
+- `notifications/initialized`
+
+Transport:
+
+- `POST /mcp` for JSON-RPC requests
+- `GET /mcp` for SSE
+
+Not implemented:
+
+- Full OAuth flow
+- Prompts
+- Full MCP surface area
+
+## Built-In Tools
+
+### `controller`
+
+Inject a virtual controller state through HDLS.
+
+Supports:
+
+- Buttons
+- Left/right analog sticks
+- Six-axis acceleration
+- Six-axis angle
+- Optional `long_press`
+
+### `cur_frame`
+
+Capture the current Switch screen and return it as a JPEG image.
+
+### `controller_recorder`
+
+Record real physical controller input only.
+
+Supported actions:
+
+- `start`
+- `stop`
+- `dump`
+- `clear`
+- `save`
+
+### `system_info`
+
+Return generic runtime information useful for automation and diagnostics.
+
+Current fields include:
+
+- System tick
+- Unix time
+- UTC time
+- Free heap estimate
+- Whether SD is mounted
+
+### `fs_ops`
+
+Perform generic SD-card filesystem operations.
+
+Supported actions:
+
+- `list`
+- `stat`
+- `read_text`
+- `write_text`
+- `mkdir`
+- `delete`
+
+## Built-In Resources
+
+Static resources:
+
+- `switch://screen/current`
+- `switch://system/status`
+
+Resource templates:
+
+- `file:///{path}`
+
+`file:///{path}` can be used to read files or directories from the mounted SD card.
+
+## Build
+
+Requirements:
+
+- `devkitPro`
+- `libnx`
+
+Set `DEVKITPRO`, then build:
+
+```bash
+make
+```
+
+The packaged sysmodule output is generated under `out/`.
+
+## Install
+
+Copy:
+
+```text
+out/atmosphere/contents/010000000000B1C0
+```
+
+to:
+
+```text
+/atmosphere/contents/010000000000B1C0
+```
+
+On the Switch, the sysmodule can be toggled from:
+
+```text
+Hekate Toolbox -> Background Services -> switch-mcp-server
+```
+
+Example MCP client config:
+
+```json
+{
+  "servers": {
+    "switch-mcp-server": {
+      "type": "streamableHttp",
+      "url": "http://<switch-ip>:12345/mcp"
     }
-    ```
+  }
+}
+```
 
-## 当前已知问题
+## Notes and Limitations
 
-1. 有时候服务打不开，可以重启下switch就可以了。原因和这个程序启动时申请2MB堆内存有关。才2MB。。。取小了的话那个获取ns画面的功能就不能正常运行。
+- The screen capture path is memory-sensitive. The current sysmodule heap is 2 MB.
+- OAuth discovery endpoints exist only as placeholders.
+- This is still a partial MCP implementation.
+- The current server is intentionally small and direct; it is not yet a full native API mapping layer.
 
-## 主要目录结构
+## Project Layout
 
-- `source/`         主体源码
-- `source/tools/`   MCP Server tools
-- `source/util/`    日志等通用工具
-- `source/third_party/`  第三方库
-- `out/`            编译输出
+- `source/` main source tree
+- `source/tools/` MCP tools and resource handlers
+- `source/transport/` HTTP, SSE, and registry dispatch
+- `source/util/` logging and utility code
+- `source/third_party/` vendored third-party code
+- `out/` packaged build output
 
-## 致谢
+## Direction
+
+The long-term direction is to expose broader Switch-native capabilities in a generic way, so this project can support:
+
+- Homebrew automation
+- Dynamic testing
+- Regression validation
+- Diagnostics
+- Experimental analysis workflows
+
+The next logical expansion areas are:
+
+- App and title lifecycle control
+- Input script playback
+- Richer system and app status resources
+- Artifact collection
+- Network, power, save-data, and account related tool groups
+
+## Credits
 
 - [devkitPro](https://devkitpro.org/)
 - [libnx](https://github.com/switchbrew/libnx)
-- [stb_base64](https://github.com/nothings/stb)
-
----
-如有问题或建议，欢迎 issue 反馈。
+- [stb](https://github.com/nothings/stb)

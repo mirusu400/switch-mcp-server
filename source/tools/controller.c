@@ -109,6 +109,14 @@ int list_controller(cJSON *tools)
 Result controllerInitialize();
 int call_controller(cJSON *content, const cJSON *arguments)
 {
+    if (!arguments) {
+        cJSON *item = cJSON_CreateObject();
+        cJSON_AddStringToObject(item, "type", "text");
+        cJSON_AddStringToObject(item, "text", "controller requires arguments");
+        cJSON_AddItemToArray(content, item);
+        return 1;
+    }
+
     if (!initialized && R_FAILED(controllerInitialize()))
     {
         log_error("initializing controller failed");

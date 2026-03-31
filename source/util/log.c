@@ -9,7 +9,7 @@
 
 
 static Mutex log_mutex = 0;
-#define LOG_FILE_PATH "/atmosphere/logs/mcp-server.log"
+#define LOG_FILE_PATH "/atmosphere/logs/switch-mcp-server.log"
 static FILE *log_file = NULL;
 
 static char *cur_time() {

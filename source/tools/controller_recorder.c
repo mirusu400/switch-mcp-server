@@ -235,9 +235,9 @@ static bool save_events_to_file(char *out_path_buf, size_t out_size) {
     // 取第一条或最后一条 tick 作为文件名基准，这里用第一条
     u64 base_tick = g_events[0].tick;
     char path[256];
-    // Switch 上 / 实际映射 sd 根，确保目录存在（简单方式：mkdir 但这里假设 /switch/mcp-server 已被创建，若没创建尝试创建）
+    // Switch 上 / 实际映射 sd 根，确保目录存在（简单方式：mkdir 但这里假设 /switch/switch-mcp-server 已被创建，若没创建尝试创建）
     // 使用 standard C I/O
-    snprintf(path, sizeof(path), "/switch/mcp-server/input_%llu.json", (unsigned long long)base_tick);
+    snprintf(path, sizeof(path), "/switch/switch-mcp-server/input_%llu.json", (unsigned long long)base_tick);
     cJSON *arr = events_to_json();
     char *json_str = cJSON_PrintUnformatted(arr);
     cJSON_Delete(arr);
@@ -256,6 +256,14 @@ static bool save_events_to_file(char *out_path_buf, size_t out_size) {
 }
 
 int call_controller_recorder(cJSON *content, const cJSON *arguments) {
+    if (!arguments) {
+        cJSON *item = cJSON_CreateObject();
+        cJSON_AddStringToObject(item, "type", "text");
+        cJSON_AddStringToObject(item, "text", "controller_recorder requires arguments");
+        cJSON_AddItemToArray(content, item);
+        return 1;
+    }
+
     const cJSON *action = cJSON_GetObjectItem(arguments, "action");
     if (!action || !cJSON_IsString(action)) {
         cJSON *item = cJSON_CreateObject();
